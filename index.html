@@ -1,0 +1,549 @@
+<!doctype html>
+<html lang="es-CL">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex,nofollow">
+<title>Señales IPSA</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📈</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,400;6..72,600&family=Public+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+  :root{
+    --bg:#F3F5F7; --surface:#FFFFFF; --surface-2:#EDF0F3;
+    --ink:#16212B; --ink-dim:#55636F; --ink-faint:#8996A1;
+    --border:#DCE2E7; --border-strong:#C4CCD3;
+    --accent:#0E7C86; --accent-ink:#06474D; --accent-tint:#E1F1F1;
+    --good:#1E7A4C; --good-tint:#E3F5EC; --good-ink:#0F5C36;
+    --warn:#8A5B00; --warn-tint:#FBF0D8; --warn-ink:#6B4600;
+    --bad:#B3261E; --bad-tint:#FBE5E3; --bad-ink:#8C1D17;
+    --neutral:#5B6570; --neutral-tint:#EDEFF1; --neutral-ink:#434B54;
+    --shadow:0 1px 2px rgba(22,33,43,.04), 0 6px 20px -8px rgba(22,33,43,.12);
+    color-scheme:light;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --bg:#0E1620; --surface:#151F29; --surface-2:#1B2733;
+      --ink:#E7ECEF; --ink-dim:#9AA7B0; --ink-faint:#697682;
+      --border:#26323F; --border-strong:#33414F;
+      --accent:#3FBCC5; --accent-ink:#BFEFF2; --accent-tint:#12333459;
+      --good:#4FC386; --good-tint:#12301fb3; --good-ink:#8FE0B4;
+      --warn:#E0AC3E; --warn-tint:#3a2c0eb3; --warn-ink:#F0C769;
+      --bad:#F0776E; --bad-tint:#3a1613b3; --bad-ink:#FBA39B;
+      --neutral:#98A3AC; --neutral-tint:#1c232ab3; --neutral-ink:#C3CAD1;
+      --shadow:0 1px 2px rgba(0,0,0,.3), 0 10px 28px -10px rgba(0,0,0,.5);
+      color-scheme:dark;
+    }
+  }
+  *{box-sizing:border-box}
+  :root{padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px)}
+  body{margin:0; background:var(--bg); color:var(--ink); font-family:"Public Sans",system-ui,sans-serif; -webkit-font-smoothing:antialiased}
+  .wrap{max-width:1240px; margin:0 auto; padding:32px 20px 64px}
+  button{font:inherit; cursor:pointer}
+  .mono{font-family:"IBM Plex Mono",ui-monospace,monospace; font-variant-numeric:tabular-nums}
+
+  header.top{display:flex; justify-content:space-between; align-items:flex-end; gap:20px; flex-wrap:wrap; margin-bottom:22px; padding-bottom:20px; border-bottom:1px solid var(--border)}
+  h1{font-family:"Newsreader",Georgia,serif; font-weight:600; font-size:2.1rem; margin:0 0 6px; letter-spacing:-.01em}
+  .sub{color:var(--ink-dim); font-size:.92rem; margin:0}
+  .sub b{color:var(--ink)}
+  .meta{display:flex; gap:8px; align-items:center; flex-wrap:wrap; justify-content:flex-end}
+  .stamp{font-family:"IBM Plex Mono",monospace; font-size:.78rem; color:var(--ink-dim); text-align:right; line-height:1.5}
+  .stamp.stale{color:var(--warn)}
+  .btn{border:1px solid var(--border-strong); background:var(--surface); color:var(--ink); border-radius:7px; padding:8px 14px; font-size:.85rem; font-weight:600}
+  .btn:hover{border-color:var(--accent)}
+  .btn.primary{background:var(--accent); border-color:var(--accent); color:#fff}
+  .btn:disabled{opacity:.55; cursor:wait}
+  .btn.icon{padding:8px 10px}
+
+  .notice{border-radius:10px; padding:12px 16px; margin-bottom:14px; font-size:.88rem; line-height:1.5; border:1px solid}
+  .notice.bad{background:var(--bad-tint); color:var(--bad-ink); border-color:transparent}
+  .notice.warn{background:var(--warn-tint); color:var(--warn-ink); border-color:transparent}
+  .notice b{font-weight:700}
+  .notice ul{margin:6px 0 0; padding-left:18px}
+
+  .stats{display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin:18px 0 26px}
+  .stat{background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:13px 16px; box-shadow:var(--shadow); cursor:pointer; user-select:none}
+  .stat.active{border-color:var(--c); box-shadow:var(--shadow), inset 0 0 0 1px var(--c)}
+  .stat .n{font-family:"IBM Plex Mono",monospace; font-size:1.8rem; font-weight:600; color:var(--c)}
+  .stat .l{font-size:.8rem; color:var(--ink-dim)}
+  .stat[data-sig="COMPRAR"]{--c:var(--good)} .stat[data-sig="VENDER"]{--c:var(--warn)}
+  .stat[data-sig="STOP-LOSS"]{--c:var(--bad)} .stat[data-sig="ESPERAR"]{--c:var(--neutral)}
+
+  section.panel{background:var(--surface); border:1px solid var(--border); border-radius:12px; box-shadow:var(--shadow); margin-bottom:26px; overflow:hidden}
+  .panel-head{display:flex; justify-content:space-between; align-items:flex-end; gap:12px; padding:18px 20px 14px; border-bottom:1px solid var(--border); flex-wrap:wrap}
+  .panel-head h2{font-family:"Newsreader",Georgia,serif; font-weight:600; font-size:1.35rem; margin:0}
+  .panel-head p{margin:3px 0 0; font-size:.83rem; color:var(--ink-dim); max-width:64ch}
+
+  .table-scroll{overflow-x:auto}
+  table{width:100%; border-collapse:collapse; font-size:.86rem; min-width:900px}
+  thead th{background:var(--surface-2); text-align:left; padding:9px 11px; font-size:.75rem; color:var(--ink-dim); font-weight:600; white-space:nowrap; border-bottom:1px solid var(--border)}
+  thead th[data-k]{cursor:pointer} thead th[data-k]:hover{color:var(--ink)}
+  thead th.sorted{color:var(--accent)}
+  th.num, td.num{text-align:right}
+  tbody td{padding:8px 11px; border-bottom:1px solid var(--border); white-space:nowrap; font-variant-numeric:tabular-nums}
+  tbody tr:last-child td{border-bottom:none}
+  tbody tr:hover td{background:var(--surface-2)}
+  td.num{font-family:"IBM Plex Mono",monospace}
+  td.accion{font-weight:600}
+  td.dim{color:var(--ink-faint)}
+  .up{color:var(--good)} .down{color:var(--bad)}
+  .mine{display:inline-block; width:7px; height:7px; border-radius:50%; background:var(--accent); margin-left:6px; vertical-align:middle}
+  .flag{color:var(--warn); font-weight:700; cursor:help}
+  .hidden-row{display:none}
+
+  .pill{display:inline-flex; align-items:center; gap:5px; padding:3px 10px; border-radius:100px; font-size:.74rem; font-weight:600; white-space:nowrap}
+  .pill::before{content:""; width:6px; height:6px; border-radius:50%; background:currentColor}
+  .pill.COMPRAR{background:var(--good-tint); color:var(--good-ink)}
+  .pill.VENDER{background:var(--warn-tint); color:var(--warn-ink)}
+  .pill.STOP-LOSS{background:var(--bad-tint); color:var(--bad-ink)}
+  .pill.ESPERAR, .pill.SIN-DATO{background:var(--neutral-tint); color:var(--neutral-ink)}
+
+  .cmp{background:var(--accent-tint)}
+  input.num{width:92px; font:inherit; font-family:"IBM Plex Mono",monospace; font-size:.84rem; text-align:right; padding:5px 7px; border-radius:6px; border:1px solid var(--border-strong); background:var(--surface); color:var(--ink)}
+  input.num:focus, select:focus, input:focus{outline:2px solid var(--accent); outline-offset:1px}
+  input.num.small{width:80px}
+
+  .pf-stats{display:grid; grid-template-columns:repeat(5,1fr); gap:12px; padding:16px 20px 6px}
+  .pf-stat{background:var(--surface-2); border:1px solid var(--border); border-radius:10px; padding:11px 14px}
+  .pf-stat .n{font-family:"IBM Plex Mono",monospace; font-size:1.2rem; font-weight:600}
+  .pf-stat .l{font-size:.75rem; color:var(--ink-dim); margin-top:2px}
+  .pf-form{display:flex; flex-wrap:wrap; align-items:end; gap:10px; padding:14px 20px; border-top:1px solid var(--border); border-bottom:1px solid var(--border); background:var(--surface-2)}
+  .field{display:flex; flex-direction:column; gap:4px}
+  .field label{font-size:.75rem; color:var(--ink-dim); font-weight:600}
+  .field input, .field select{font:inherit; font-size:.86rem; padding:7px 10px; border-radius:6px; border:1px solid var(--border-strong); background:var(--surface); color:var(--ink)}
+  .field input{width:130px}
+  .param{display:flex; flex-direction:column; align-items:flex-end; gap:2px}
+  .vig{font-family:"IBM Plex Mono",monospace; font-size:.74rem; color:var(--ink-faint)}
+  .vig.chg-up{color:var(--good); font-weight:600}
+  .vig.chg-down{color:var(--bad); font-weight:600}
+  td.changed{background:var(--warn-tint)}
+  .row-actions{display:flex; gap:4px}
+  .tiny{border:none; background:transparent; color:var(--ink-faint); padding:4px 6px; border-radius:5px; font-size:.8rem}
+  .tiny:hover{color:var(--ink); background:var(--surface-2)}
+  .tiny.del:hover{color:var(--bad); background:var(--bad-tint)}
+  .savebar{display:flex; gap:10px; align-items:center; justify-content:flex-end; padding:12px 20px}
+  .savebar .msg{font-size:.82rem; color:var(--ink-dim)}
+  .empty{padding:24px 20px; text-align:center; color:var(--ink-faint); font-size:.88rem}
+
+  .setup{max-width:520px; margin:40px auto; background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:24px; box-shadow:var(--shadow)}
+  .setup h2{font-family:"Newsreader",Georgia,serif; margin:0 0 8px}
+  .setup p{color:var(--ink-dim); font-size:.88rem; line-height:1.5}
+  .setup .field{margin-bottom:12px} .setup .field input{width:100%}
+  dialog{border:none; padding:0; background:transparent}
+  dialog::backdrop{background:rgba(0,0,0,.35)}
+
+  footer{margin-top:8px; padding-top:16px; border-top:1px solid var(--border); font-size:.78rem; color:var(--ink-faint); line-height:1.7}
+
+  @media (max-width:760px){
+    .stats{grid-template-columns:repeat(2,1fr)}
+    .pf-stats{grid-template-columns:repeat(2,1fr)}
+    .meta{justify-content:flex-start} .stamp{text-align:left}
+  }
+</style>
+</head>
+<body>
+<div class="wrap" id="app"></div>
+
+<dialog id="cfg-dialog"><div class="setup" id="cfg-box"></div></dialog>
+
+<script>
+// ===================== configuración y API de GitHub =====================
+const CFG_KEY = "senales_ipsa_cfg";
+let cfg = {};
+try { cfg = JSON.parse(localStorage.getItem(CFG_KEY) || "{}"); } catch (e) {}
+const ready = () => cfg.owner && cfg.repo && cfg.token;
+
+async function gh(path, opts = {}) {
+  const r = await fetch(`https://api.github.com/repos/${cfg.owner}/${cfg.repo}/${path}`, {
+    cache: "no-store",
+    ...opts,
+    headers: { Authorization: `Bearer ${cfg.token}`, Accept: "application/vnd.github+json", ...(opts.headers || {}) },
+  });
+  if (!r.ok && r.status !== 404) throw new Error(`GitHub ${r.status}: ${(await r.text()).slice(0, 160)}`);
+  return r;
+}
+const b64dec = s => new TextDecoder().decode(Uint8Array.from(atob(s.replace(/\n/g, "")), c => c.charCodeAt(0)));
+const b64enc = s => { let b = ""; new TextEncoder().encode(s).forEach(x => b += String.fromCharCode(x)); return btoa(b); };
+
+async function readData(file) {
+  const r = await gh(`contents/data/${file}?ref=${cfg.branch || "main"}`);
+  if (r.status === 404) return { json: null, sha: null };
+  const j = await r.json();
+  // archivos >1 MB no traen content; no es el caso de estos JSON
+  return { json: JSON.parse(b64dec(j.content)), sha: j.sha };
+}
+
+// ===================== formato =====================
+const fmtN = v => v === null || v === undefined || v === "" || isNaN(v) ? "—" :
+  Number(v).toLocaleString("es-CL", { minimumFractionDigits: Number(v) % 1 === 0 ? 0 : 2, maximumFractionDigits: 2 });
+const fmtP = v => v === null || v === undefined || isNaN(v) || !isFinite(v) ? "—" :
+  (v * 100).toLocaleString("es-CL", { maximumFractionDigits: 1 }) + "%";
+const fmtCLP = v => v === null || v === undefined || isNaN(v) ? "—" : (v < 0 ? "−$" : "$") + Math.round(Math.abs(v)).toLocaleString("es-CL");
+const cls = v => v === null || v === undefined || isNaN(v) ? "" : v >= 0 ? "up" : "down";
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const fmtFecha = iso => iso ? new Date(iso).toLocaleString("es-CL", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }) : "—";
+const fmtDia = d => d ? new Date(d + "T12:00:00").toLocaleDateString("es-CL", { day: "2-digit", month: "short", year: "numeric" }) : "—";
+
+function senal(p, compra, venta, stop) {
+  if (p === null || p === undefined || isNaN(p) || compra == null) return "SIN-DATO";
+  if (p <= stop) return "STOP-LOSS";
+  if (p >= venta) return "VENDER";
+  if (p <= compra) return "COMPRAR";
+  return "ESPERAR";
+}
+const pill = s => `<span class="pill ${s}">${s === "SIN-DATO" ? "Sin dato" : s}</span>`;
+
+// ===================== estado =====================
+let S = { senales: null, precios: null, cartera: { posiciones: [] }, carteraSha: null, dirty: false };
+let filtro = null, sortK = null, sortDir = 1;
+const CMP_KEY = "senales_ipsa_cmp";
+let cmp = {};
+try { cmp = JSON.parse(localStorage.getItem(CMP_KEY) || "{}"); } catch (e) {}
+
+const vig = t => (S.senales?.acciones || []).find(a => a.accion === t);
+const precio = t => S.precios?.precios?.[t]?.precio ?? null;
+
+// ===================== carga =====================
+async function cargar() {
+  const app = document.getElementById("app");
+  if (!ready()) { app.innerHTML = ""; abrirConfig(true); return; }
+  app.innerHTML = `<p class="sub" style="padding:40px 0">Cargando datos…</p>`;
+  try {
+    const [s, p, c] = await Promise.all([readData("senales_actual.json"), readData("precios.json"), readData("cartera.json")]);
+    S.senales = s.json; S.precios = p.json;
+    if (!S.dirty) { S.cartera = c.json || { posiciones: [] }; }
+    S.carteraSha = c.sha;
+    render();
+  } catch (e) {
+    app.innerHTML = `<div class="notice bad"><b>No pude leer el repo.</b> ${esc(e.message)}<br>Revisa usuario, repo y token en ⚙.</div>
+      <button class="btn" onclick="abrirConfig()">⚙ Configuración</button>`;
+  }
+}
+
+// ===================== render =====================
+function render() {
+  const acc = S.senales?.acciones || [];
+  const upd = S.precios?.actualizado;
+  const stale = upd ? (Date.now() - new Date(upd).getTime()) > 6 * 3600e3 : true;
+  const mis = new Set(S.cartera.posiciones.map(p => p.accion));
+
+  const avisos = [];
+  const cambios = S.cartera.posiciones.map(p => {
+    const v = vig(p.accion), o = p.originales || {};
+    if (!v) return `<li><b>${esc(p.accion)}</b> ya no viene en el boletín</li>`;
+    const d = ["compra", "venta", "stop"].filter(k => o[k] != null && o[k] !== v[k])
+      .map(k => `${{ compra: "compra", venta: "take profit", stop: "stop" }[k]} ${fmtN(o[k])} → ${fmtN(v[k])}`);
+    return d.length ? `<li><b>${esc(p.accion)}</b>: ${d.join(" · ")}</li>` : "";
+  }).filter(Boolean);
+  if (cambios.length) avisos.push(`<div class="notice bad"><b>Cambiaron parámetros de tu cartera respecto de los originales</b><ul>${cambios.join("")}</ul></div>`);
+  const sosp = S.precios?.sospechosos || [], sd = S.precios?.sin_dato || [];
+  if (sosp.length || sd.length) avisos.push(`<div class="notice warn">${sosp.length ? `<b>Revisar precio</b> (más de 25% vs cierre del boletín): ${sosp.join(", ")}. ` : ""}${sd.length ? `<b>Sin precio</b>: ${sd.join(", ")}.` : ""}</div>`);
+
+  const cnt = { COMPRAR: 0, VENDER: 0, "STOP-LOSS": 0, ESPERAR: 0 };
+  acc.forEach(a => { const s = senal(precio(a.accion), a.compra, a.venta, a.stop); if (s in cnt) cnt[s]++; });
+
+  document.getElementById("app").innerHTML = `
+  <header class="top">
+    <div>
+      <h1>Señales IPSA</h1>
+      <p class="sub">Boletín Ossa Señoret <b>Nº ${esc(S.senales?.numero ?? "—")}</b> del ${fmtDia(S.senales?.fecha)} · corto plazo, ${acc.length} acciones</p>
+    </div>
+    <div class="meta">
+      <div class="stamp ${stale ? "stale" : ""}">precios al ${fmtFecha(upd)}<br>Yahoo Finance, ~15 min de demora</div>
+      <button class="btn primary" id="btn-run">Actualizar precios</button>
+      <button class="btn icon" title="Recargar" onclick="cargar()">↻</button>
+      <button class="btn icon" title="Configuración" onclick="abrirConfig()">⚙</button>
+    </div>
+  </header>
+  <div id="run-msg"></div>
+  ${avisos.join("")}
+  <div class="stats">${Object.entries(cnt).map(([s, n]) => `
+    <div class="stat ${filtro === s ? "active" : ""}" data-sig="${s}"><div class="n">${n}</div><div class="l">${s}</div></div>`).join("")}
+  </div>
+
+  <section class="panel">
+    <div class="panel-head">
+      <div><h2>Corto plazo</h2><p>Señal según precio actual contra compra, venta objetivo y stop-loss del boletín. El punto marca acciones que tienes en cartera. Escribe un precio en <i>Comparar</i> para simular.</p></div>
+    </div>
+    <div class="table-scroll"><table id="tbl-cp">
+      <thead><tr>
+        <th data-k="accion">Acción</th>
+        <th data-k="cierre" class="num">Cierre bol.</th>
+        <th data-k="precio" class="num">Precio actual</th>
+        <th data-k="var" class="num">Var.</th>
+        <th data-k="compra" class="num">Compra</th>
+        <th data-k="venta" class="num">Venta obj.</th>
+        <th data-k="stop" class="num">Stop-loss</th>
+        <th data-k="upside" class="num">Upside</th>
+        <th data-k="colchon" class="num">Colchón s/ stop</th>
+        <th data-k="senal">Señal</th>
+        <th class="num cmp">Comparar</th>
+        <th class="num cmp">Upside*</th>
+        <th class="cmp">Señal*</th>
+      </tr></thead>
+      <tbody>${filasCP(mis)}</tbody>
+    </table></div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head">
+      <div><h2>Mi cartera</h2><p>Parámetros originales (los del boletín cuando compraste) contra los vigentes: las celdas en amarillo cambiaron. Escribe un precio de venta para ver tu utilidad si vendes a ese precio. Los cambios se guardan en el repo y alimentan las alertas por mail.</p></div>
+    </div>
+    <div class="pf-stats" id="pf-stats"></div>
+    <div class="pf-form">
+      <div class="field"><label>Acción</label><select id="f-acc">${acc.map(a => a.accion).sort().map(t => `<option>${t}</option>`).join("")}</select></div>
+      <div class="field"><label>Cantidad</label><input type="number" id="f-cant" min="1" step="1" placeholder="Ej: 260"></div>
+      <div class="field"><label>Precio compra</label><input type="number" id="f-pc" min="0" step="0.01" placeholder="Ej: 6684,80"></div>
+      <div class="field"><label>Fecha compra</label><input type="date" id="f-fecha" value="${new Date().toISOString().slice(0, 10)}"></div>
+      <button class="btn primary" id="f-add">Agregar</button>
+      <span class="sub" style="font-size:.8rem">Los originales parten con los parámetros vigentes; corrígelos en la tabla si compraste con otro boletín.</span>
+    </div>
+    <div class="table-scroll"><table id="tbl-pf">
+      <thead><tr>
+        <th>Acción</th><th class="num">Cantidad</th><th class="num">P. compra</th><th class="num">Invertido</th>
+        <th class="num">P. actual</th><th class="num">Utilidad no realizada</th>
+        <th class="num">Compra orig.</th><th class="num">Take profit orig.</th><th class="num">Stop orig.</th>
+        <th>Señal</th><th class="num">Dividendos</th><th class="num cmp">Precio venta</th><th class="num cmp">Utilidad al vender</th><th></th>
+      </tr></thead>
+      <tbody id="pf-body"></tbody>
+    </table></div>
+    <div class="empty" id="pf-empty" hidden>Aún no tienes acciones cargadas.</div>
+    <div class="savebar"><span class="msg" id="save-msg">${S.dirty ? "Cambios sin guardar" : ""}</span><button class="btn primary" id="btn-save" ${S.dirty ? "" : "disabled"}>Guardar cartera</button></div>
+  </section>
+
+  <footer>
+    Parámetros del Boletín Técnico de Ossa Señoret (Consorcio Corredores de Bolsa); no constituyen recomendación de inversión.
+    Precios de Yahoo Finance con demora de ~15 minutos: confirma en tu bróker antes de operar.
+    Boletín procesado el ${fmtFecha(S.senales?.procesado)}.
+  </footer>`;
+
+  renderCartera();
+  bind();
+}
+
+function filaData(a) {
+  const p = precio(a.accion);
+  return {
+    ...a, precio: p,
+    var: p != null && a.cierre ? p / a.cierre - 1 : null,
+    upside: p != null ? (a.venta - p) / p : null,
+    colchon: p != null ? (p - a.stop) / p : null,
+    senal: senal(p, a.compra, a.venta, a.stop),
+  };
+}
+
+function filasCP(mis) {
+  let rows = (S.senales?.acciones || []).map(filaData);
+  if (sortK) rows.sort((x, y) => {
+    const a = x[sortK], b = y[sortK];
+    if (typeof a === "string" || typeof b === "string") return String(a).localeCompare(String(b)) * sortDir;
+    return ((a ?? -Infinity) - (b ?? -Infinity)) * sortDir;
+  });
+  return rows.map(r => {
+    const sosp = S.precios?.precios?.[r.accion]?.sospechoso;
+    return `<tr data-sig="${r.senal}" class="${filtro && r.senal !== filtro ? "hidden-row" : ""}">
+      <td class="accion">${r.accion}${mis.has(r.accion) ? '<span class="mine" title="En tu cartera"></span>' : ""}</td>
+      <td class="num dim">${fmtN(r.cierre)}</td>
+      <td class="num">${fmtN(r.precio)}${sosp ? ' <span class="flag" title="Más de 25% vs cierre del boletín: revisa el precio">⚠</span>' : ""}</td>
+      <td class="num ${cls(r.var)}">${fmtP(r.var)}</td>
+      <td class="num dim">${fmtN(r.compra)}</td>
+      <td class="num dim">${fmtN(r.venta)}</td>
+      <td class="num dim">${fmtN(r.stop)}</td>
+      <td class="num ${cls(r.upside)}">${fmtP(r.upside)}</td>
+      <td class="num ${cls(r.colchon)}">${fmtP(r.colchon)}</td>
+      <td>${pill(r.senal)}</td>
+      <td class="num cmp"><input class="num small cmp-in" type="number" step="0.01" data-t="${r.accion}" value="${esc(cmp[r.accion] ?? "")}" placeholder="${fmtN(r.precio)}"></td>
+      <td class="num cmp" data-out="up-${r.accion}"></td>
+      <td class="cmp" data-out="sig-${r.accion}"></td>
+    </tr>`;
+  }).join("");
+}
+
+function actualizarCmp(t) {
+  const a = vig(t), v = parseFloat(cmp[t]);
+  const up = document.querySelector(`[data-out="up-${CSS.escape(t)}"]`), sg = document.querySelector(`[data-out="sig-${CSS.escape(t)}"]`);
+  if (!up) return;
+  if (isNaN(v) || v <= 0) { up.textContent = "—"; up.className = "num cmp"; sg.textContent = "—"; return; }
+  const u = (a.venta - v) / v;
+  up.textContent = fmtP(u); up.className = `num cmp ${cls(u)}`;
+  sg.innerHTML = pill(senal(v, a.compra, a.venta, a.stop));
+}
+
+function renderCartera() {
+  const body = document.getElementById("pf-body");
+  const pos = S.cartera.posiciones;
+  document.getElementById("pf-empty").hidden = pos.length > 0;
+  let inv = 0, val = 0, sinDato = false, div = 0, utilVenta = 0, hayVenta = false;
+
+  body.innerHTML = pos.map((p, i) => {
+    const v = vig(p.accion) || {}, o = p.originales || {}, pa = precio(p.accion);
+    const invertido = p.cantidad * p.precio_compra;
+    const unr = pa != null ? (pa - p.precio_compra) * p.cantidad : null;
+    inv += invertido; div += Number(p.dividendos) || 0;
+    if (pa != null) val += pa * p.cantidad; else sinDato = true;
+    const pv = parseFloat(p.precio_venta);
+    const uv = !isNaN(pv) ? (pv - p.precio_compra) * p.cantidad + (Number(p.dividendos) || 0) : null;
+    if (uv !== null) { utilVenta += uv; hayVenta = true; }
+    const param = k => {
+      const changed = o[k] != null && v[k] != null && o[k] !== v[k];
+      const dir = changed ? (v[k] > o[k] ? "chg-up" : "chg-down") : "";
+      return `<td class="num ${changed ? "changed" : ""}"><div class="param">
+        <input class="num small" type="number" step="0.01" data-i="${i}" data-f="orig-${k}" value="${o[k] ?? ""}">
+        <span class="vig ${dir}">vig. ${fmtN(v[k])}${changed ? (dir === "chg-up" ? " ▲" : " ▼") : ""}</span></div></td>`;
+    };
+    return `<tr>
+      <td class="accion">${esc(p.accion)}<div class="vig">${p.fecha_compra ? fmtDia(p.fecha_compra) : ""}</div></td>
+      <td class="num"><input class="num small" type="number" step="1" min="0" data-i="${i}" data-f="cantidad" value="${p.cantidad}"></td>
+      <td class="num"><input class="num" type="number" step="0.01" min="0" data-i="${i}" data-f="precio_compra" value="${p.precio_compra}"></td>
+      <td class="num dim">${fmtCLP(invertido)}</td>
+      <td class="num">${fmtN(pa)}</td>
+      <td class="num ${cls(unr)}">${fmtCLP(unr)}<div class="vig">${fmtP(unr != null ? unr / invertido : null)}</div></td>
+      ${param("compra")}${param("venta")}${param("stop")}
+      <td>${pill(senal(pa, v.compra, v.venta, v.stop))}</td>
+      <td class="num"><input class="num small" type="number" step="1" min="0" data-i="${i}" data-f="dividendos" value="${p.dividendos || ""}" placeholder="0"></td>
+      <td class="num cmp"><input class="num" type="number" step="0.01" min="0" data-i="${i}" data-f="precio_venta" value="${p.precio_venta ?? ""}" placeholder="${fmtN(pa)}"></td>
+      <td class="num cmp ${cls(uv)}">${fmtCLP(uv)}<div class="vig">${fmtP(uv != null ? uv / invertido : null)}</div></td>
+      <td><div class="row-actions">
+        <button class="tiny" data-adopt="${i}" title="Usar los parámetros vigentes como originales">✓ vig.</button>
+        <button class="tiny del" data-del="${i}" title="Quitar">✕</button>
+      </div></td>
+    </tr>`;
+  }).join("");
+
+  const unrT = val - inv;
+  document.getElementById("pf-stats").innerHTML = [
+    ["Invertido", fmtCLP(inv), ""],
+    ["Valor actual" + (sinDato ? " *" : ""), fmtCLP(val), ""],
+    ["Utilidad no realizada", fmtCLP(unrT) + ` <span class="vig">${fmtP(inv ? unrT / inv : null)}</span>`, cls(unrT)],
+    ["Dividendos", fmtCLP(div), ""],
+    ["Utilidad al vender (esc.)", hayVenta ? fmtCLP(utilVenta) : "—", hayVenta ? cls(utilVenta) : ""],
+  ].map(([l, n, c]) => `<div class="pf-stat"><div class="n ${c}">${n}</div><div class="l">${l}</div></div>`).join("");
+}
+
+function marcarDirty() {
+  S.dirty = true;
+  const b = document.getElementById("btn-save"); if (b) b.disabled = false;
+  document.getElementById("save-msg").textContent = "Cambios sin guardar";
+}
+
+// ===================== eventos =====================
+function bind() {
+  document.querySelectorAll(".stat").forEach(el => el.onclick = () => { filtro = filtro === el.dataset.sig ? null : el.dataset.sig; render(); });
+  document.querySelectorAll("#tbl-cp th[data-k]").forEach(th => {
+    if (th.dataset.k === sortK) th.classList.add("sorted");
+    th.onclick = () => { sortDir = sortK === th.dataset.k ? -sortDir : 1; sortK = th.dataset.k; render(); };
+  });
+  document.querySelectorAll(".cmp-in").forEach(inp => {
+    actualizarCmp(inp.dataset.t);
+    inp.oninput = () => {
+      if (inp.value === "") delete cmp[inp.dataset.t]; else cmp[inp.dataset.t] = inp.value;
+      try { localStorage.setItem(CMP_KEY, JSON.stringify(cmp)); } catch (e) {}
+      actualizarCmp(inp.dataset.t);
+    };
+  });
+
+  const body = document.getElementById("pf-body");
+  body.onchange = e => {
+    const inp = e.target, i = inp.dataset.i, f = inp.dataset.f;
+    if (i === undefined) return;
+    const p = S.cartera.posiciones[i], val = inp.value === "" ? null : parseFloat(inp.value);
+    if (f.startsWith("orig-")) { p.originales = p.originales || {}; p.originales[f.slice(5)] = val; }
+    else p[f] = (f === "precio_venta" || f === "dividendos") ? val : (val ?? 0);
+    marcarDirty(); render();
+  };
+  body.onclick = e => {
+    const ad = e.target.closest("[data-adopt]"), del = e.target.closest("[data-del]");
+    if (ad) {
+      const p = S.cartera.posiciones[ad.dataset.adopt], v = vig(p.accion);
+      if (v) { p.originales = { compra: v.compra, venta: v.venta, stop: v.stop }; marcarDirty(); render(); }
+    }
+    if (del) {
+      const p = S.cartera.posiciones[del.dataset.del];
+      if (confirm(`¿Quitar ${p.accion} de tu cartera?`)) { S.cartera.posiciones.splice(del.dataset.del, 1); marcarDirty(); render(); }
+    }
+  };
+
+  document.getElementById("f-add").onclick = () => {
+    const t = document.getElementById("f-acc").value;
+    const q = parseFloat(document.getElementById("f-cant").value), pc = parseFloat(document.getElementById("f-pc").value);
+    if (!t || !(q > 0) || !(pc > 0)) { alert("Completa acción, cantidad y precio de compra."); return; }
+    const v = vig(t) || {};
+    S.cartera.posiciones.push({
+      id: `${t.toLowerCase()}-${Date.now().toString(36)}`, accion: t, cantidad: q, precio_compra: pc,
+      fecha_compra: document.getElementById("f-fecha").value || null,
+      originales: { compra: v.compra ?? null, venta: v.venta ?? null, stop: v.stop ?? null },
+      dividendos: 0, precio_venta: null,
+    });
+    marcarDirty(); render();
+  };
+
+  document.getElementById("btn-save").onclick = guardarCartera;
+  document.getElementById("btn-run").onclick = correrPrecios;
+}
+
+async function guardarCartera() {
+  const btn = document.getElementById("btn-save"), msg = document.getElementById("save-msg");
+  btn.disabled = true; msg.textContent = "Guardando…";
+  try {
+    const body = { message: "cartera: actualización desde dashboard", content: b64enc(JSON.stringify(S.cartera, null, 2) + "\n"), branch: cfg.branch || "main" };
+    if (S.carteraSha) body.sha = S.carteraSha;
+    let r = await gh("contents/data/cartera.json", { method: "PUT", body: JSON.stringify(body) });
+    const j = await r.json();
+    S.carteraSha = j.content.sha; S.dirty = false;
+    msg.textContent = "Guardado ✓";
+  } catch (e) {
+    btn.disabled = false;
+    msg.textContent = e.message.includes("409") ? "El archivo cambió en GitHub: recarga (↻) y vuelve a intentar." : "No se pudo guardar: " + e.message;
+  }
+}
+
+async function correrPrecios() {
+  const btn = document.getElementById("btn-run"), box = document.getElementById("run-msg");
+  btn.disabled = true; btn.textContent = "Corriendo…";
+  const show = (t, k = "warn") => box.innerHTML = `<div class="notice ${k}">${t}</div>`;
+  try {
+    const t0 = new Date();
+    await gh("actions/workflows/precios.yml/dispatches", { method: "POST", body: JSON.stringify({ ref: cfg.branch || "main", inputs: { force: "true" } }) });
+    show("Actualizando precios en GitHub… suele tomar entre 1 y 2 minutos.");
+    for (let k = 0; k < 18; k++) {
+      await new Promise(r => setTimeout(r, 10000));
+      const runs = await (await gh("actions/workflows/precios.yml/runs?per_page=1&event=workflow_dispatch")).json();
+      const run = runs.workflow_runs?.[0];
+      if (run && new Date(run.created_at) >= new Date(t0 - 30000) && run.status === "completed") {
+        if (run.conclusion !== "success") { show(`La corrida terminó con error. <a href="${run.html_url}" target="_blank" rel="noopener">Ver log</a>`, "bad"); break; }
+        box.innerHTML = ""; await cargar(); return;
+      }
+    }
+  } catch (e) { show("No pude lanzar la actualización: " + esc(e.message), "bad"); }
+  btn.disabled = false; btn.textContent = "Actualizar precios";
+}
+
+// ===================== configuración =====================
+function abrirConfig(primeraVez) {
+  const dlg = document.getElementById("cfg-dialog");
+  document.getElementById("cfg-box").innerHTML = `
+    <h2>Conectar con tu repo</h2>
+    <p>Los datos viven en tu repo privado. El token queda guardado solo en este navegador. Necesita permisos de <b>Contents</b> (lectura y escritura) y <b>Actions</b> (lectura y escritura) sobre ese repo.</p>
+    <div class="field"><label>Usuario de GitHub</label><input id="c-owner" value="${esc(cfg.owner || "")}" placeholder="tu-usuario"></div>
+    <div class="field"><label>Repo</label><input id="c-repo" value="${esc(cfg.repo || "senales-ipsa")}"></div>
+    <div class="field"><label>Rama</label><input id="c-branch" value="${esc(cfg.branch || "main")}"></div>
+    <div class="field"><label>Token (fine-grained)</label><input id="c-token" type="password" value="${esc(cfg.token || "")}" placeholder="github_pat_…"></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:8px">
+      ${primeraVez ? "" : '<button class="btn" id="c-cancel">Cancelar</button>'}
+      <button class="btn primary" id="c-ok">Guardar</button>
+    </div>`;
+  dlg.showModal();
+  const c = document.getElementById("c-cancel"); if (c) c.onclick = () => dlg.close();
+  document.getElementById("c-ok").onclick = () => {
+    cfg = { owner: c_("owner"), repo: c_("repo"), branch: c_("branch") || "main", token: c_("token") };
+    try { localStorage.setItem(CFG_KEY, JSON.stringify(cfg)); } catch (e) {}
+    dlg.close(); cargar();
+  };
+}
+const c_ = k => document.getElementById("c-" + k).value.trim();
+
+window.addEventListener("beforeunload", e => { if (S.dirty) { e.preventDefault(); e.returnValue = ""; } });
+cargar();
+</script>
+</body>
+</html>
