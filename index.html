@@ -320,9 +320,22 @@ function render() {
 
   <section class="panel">
     <div class="panel-head">
-      <div><h2>Ventas realizadas</h2><p>Registro de lo que ya vendiste. Para registrar una venta usa el botón <i>Vender</i> de cada posición; si te equivocas, <i>↩</i> la devuelve a la cartera.</p></div>
+      <div><h2>Ventas realizadas</h2><p>Registro de lo que ya vendiste. Las ventas de tu cartera se registran con <i>Vender</i> o ✕ (te pide el precio); <i>↩</i> la devuelve a la cartera. Las operaciones anteriores ingrésalas abajo.</p></div>
     </div>
     <div class="pf-stats" id="vt-stats"></div>
+    <div class="pf-form">
+      <div class="field"><label>Acción</label><input id="m-acc" list="m-tickers" placeholder="Ej: LTM" style="width:120px"></div>
+      <datalist id="m-tickers">${acc.map(a => a.accion).sort().map(t => `<option value="${t}">`).join("")}</datalist>
+      <div class="field"><label>Cantidad</label><input id="m-q" type="number" min="1" step="1" style="width:100px"></div>
+      <div class="field"><label>Fecha compra</label><input id="m-fc" type="date"></div>
+      <div class="field"><label>Precio compra</label><input id="m-pc" type="number" min="0" step="0.01" style="width:110px"></div>
+      <div class="field"><label>Fecha venta</label><input id="m-fv" type="date"></div>
+      <div class="field"><label>Precio venta</label><input id="m-pv" type="number" min="0" step="0.01" style="width:110px"></div>
+      <div class="field"><label>Dividendos $</label><input id="m-div" type="number" min="0" step="1" placeholder="0" style="width:100px"></div>
+      <div class="field"><label>Motivo</label><select id="m-mot"><option>Stop-loss</option><option>Take profit</option><option selected>Manual</option></select></div>
+      <button class="btn primary" id="m-add">Agregar venta</button>
+      <span class="sub" style="font-size:.8rem;width:100%">Para operaciones anteriores al dashboard. No toca tu cartera actual.</span>
+    </div>
     <div class="table-scroll"><table>
       <thead><tr>
         <th>Acción</th><th>Compra</th><th>Venta</th><th class="num">Días</th><th class="num">Cantidad</th>
@@ -436,7 +449,7 @@ function renderCartera() {
       <td><div class="row-actions">
         <button class="tiny" data-sell="${i}" title="Registrar venta">Vender</button>
         <button class="tiny" data-adopt="${i}" title="Usar los parámetros vigentes como originales">✓ vig.</button>
-        <button class="tiny del" data-del="${i}" title="Quitar">✕</button>
+        <button class="tiny del" data-del="${i}" title="Quitar de la cartera (registra la venta)">✕</button>
       </div></td>
     </tr>`;
   }).join("");
@@ -471,7 +484,7 @@ function renderVentas() {
       <td class="num dim">${fmtCLP(v.dividendos || 0)}</td>
       <td class="num ${cls(u)}">${fmtCLP(u)}<div class="vig">${fmtP(base ? u / base : null)}</div></td>
       <td>${esc(v.motivo || "")}</td>
-      <td><button class="tiny" data-undo="${esc(v.id)}" title="Deshacer: devolver a la cartera">↩</button></td>
+      <td><div class="row-actions">${v.origen === "manual" ? "" : `<button class="tiny" data-undo="${esc(v.id)}" title="Deshacer: devolver a la cartera">↩</button>`}<button class="tiny del" data-vdel="${esc(v.id)}" title="Borrar este registro">✕</button></div></td>
     </tr>`;
   }).join("");
 
@@ -487,9 +500,28 @@ function renderVentas() {
   ].map(([l, n, c]) => `<div class="pf-stat"><div class="n ${c}">${n}</div><div class="l">${l}</div></div>`).join("");
 
   document.querySelectorAll("[data-undo]").forEach(b => b.onclick = () => deshacerVenta(b.dataset.undo));
+  document.querySelectorAll("[data-vdel]").forEach(b => b.onclick = () => {
+    const vs = S.cartera.ventas || [], k = vs.findIndex(v => v.id === b.dataset.vdel);
+    if (k < 0 || !confirm(`¿Borrar el registro de venta de ${vs[k].accion}? No se devuelve a la cartera.`)) return;
+    vs.splice(k, 1); marcarDirty(); render(); guardarCartera();
+  });
+  const add = document.getElementById("m-add");
+  if (add) add.onclick = () => {
+    const g = id => document.getElementById(id).value.trim();
+    const t = g("m-acc").toUpperCase(), q = Math.floor(+g("m-q")), pc = +g("m-pc"), pv = +g("m-pv");
+    if (!t || !(q > 0) || !(pc > 0) || !(pv > 0) || !g("m-fv")) { alert("Completa acción, cantidad, precio de compra, fecha y precio de venta."); return; }
+    if (g("m-fc") && g("m-fc") > g("m-fv")) { alert("La fecha de compra es posterior a la de venta."); return; }
+    S.cartera.ventas = S.cartera.ventas || [];
+    S.cartera.ventas.push({
+      id: `v-${Date.now().toString(36)}`, pos_id: null, accion: t, cantidad: q, precio_compra: pc, precio_venta: pv,
+      fecha_compra: g("m-fc") || null, fecha_venta: g("m-fv"), dividendos: Math.round(+g("m-div") || 0),
+      motivo: g("m-mot"), originales: null, origen: "manual",
+    });
+    marcarDirty(); render(); guardarCartera();
+  };
 }
 
-function abrirVenta(i) {
+function abrirVenta(i, desdeBorrar) {
   const p = S.cartera.posiciones[i], v = vig(p.accion) || {}, pa = precio(p.accion);
   const ef = stopEf(p.originales?.stop, v.stop);
   const sugerido = parseFloat(p.precio_venta) || pa || "";
@@ -503,7 +535,8 @@ function abrirVenta(i) {
     <div class="field"><label>Fecha de venta</label><input id="s-f" type="date" value="${new Date().toISOString().slice(0, 10)}"></div>
     <div class="field"><label>Motivo</label><select id="s-m">${["Stop-loss", "Take profit", "Manual"].map(m => `<option>${m}</option>`).join("")}</select></div>
     <p id="s-prev" class="vig" style="font-size:.85rem"></p>
-    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:8px">
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:8px;flex-wrap:wrap">
+      ${desdeBorrar ? '<button class="btn" id="s-solo" title="Para corregir una posición mal ingresada">Borrar sin registrar venta</button>' : ""}
       <button class="btn" id="s-cancel">Cancelar</button><button class="btn primary" id="s-ok">Registrar venta</button>
     </div>`;
   const qI = document.getElementById("s-q"), pI = document.getElementById("s-p"), mI = document.getElementById("s-m");
@@ -518,6 +551,11 @@ function abrirVenta(i) {
   mI.value = motivoPara(+pI.value); prev();
   dlg.showModal();
   document.getElementById("s-cancel").onclick = () => dlg.close();
+  const solo = document.getElementById("s-solo");
+  if (solo) solo.onclick = () => {
+    if (!confirm(`¿Borrar ${p.accion} de la cartera sin registrar venta?`)) return;
+    S.cartera.posiciones.splice(i, 1); dlg.close(); marcarDirty(); render(); guardarCartera();
+  };
   document.getElementById("s-ok").onclick = () => {
     const q = Math.floor(+qI.value), pv = +pI.value;
     if (!(q > 0 && q <= p.cantidad) || !(pv > 0)) { alert("Revisa cantidad y precio."); return; }
@@ -527,7 +565,7 @@ function abrirVenta(i) {
       id: `v-${Date.now().toString(36)}`, pos_id: p.id, accion: p.accion, cantidad: q,
       precio_compra: p.precio_compra, precio_venta: pv, fecha_compra: p.fecha_compra || null,
       fecha_venta: document.getElementById("s-f").value, dividendos: Math.round(div),
-      motivo: mI.value, originales: p.originales || null,
+      motivo: mI.value, originales: p.originales || null, origen: "cartera",
     });
     if (q === p.cantidad) S.cartera.posiciones.splice(i, 1);
     else { p.cantidad -= q; p.dividendos = Math.round((Number(p.dividendos) || 0) - div); p.precio_venta = null; }
@@ -589,10 +627,7 @@ function bind() {
       const p = S.cartera.posiciones[ad.dataset.adopt], v = vig(p.accion);
       if (v) { p.originales = { compra: v.compra, venta: v.venta, stop: v.stop }; marcarDirty(); render(); }
     }
-    if (del) {
-      const p = S.cartera.posiciones[del.dataset.del];
-      if (confirm(`¿Quitar ${p.accion} de tu cartera?`)) { S.cartera.posiciones.splice(del.dataset.del, 1); marcarDirty(); render(); }
-    }
+    if (del) abrirVenta(+del.dataset.del, true);
   };
 
   document.getElementById("f-add").onclick = () => {
