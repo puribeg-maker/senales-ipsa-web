@@ -96,6 +96,7 @@
   .pill.COMPRAR{background:var(--good-tint); color:var(--good-ink)}
   .pill.VENDER{background:var(--warn-tint); color:var(--warn-ink)}
   .pill.STOP-LOSS{background:var(--bad-tint); color:var(--bad-ink)}
+  .pill.OPORTUNIDAD{background:var(--accent); color:#fff}
   .pill.ESPERAR, .pill.SIN-DATO{background:var(--neutral-tint); color:var(--neutral-ink)}
 
   .cmp{background:var(--accent-tint)}
@@ -166,7 +167,7 @@ const b64dec = s => new TextDecoder().decode(Uint8Array.from(atob(s.replace(/\n/
 const b64enc = s => { let b = ""; new TextEncoder().encode(s).forEach(x => b += String.fromCharCode(x)); return btoa(b); };
 
 async function readData(file) {
-  const r = await gh(`contents/data/${file}?ref=${cfg.branch || "main"}`);
+  const r = await gh(`contents/${file.includes("/") || file === "config.json" ? file : "data/" + file}?ref=${cfg.branch || "main"}`);
   if (r.status === 404) return { json: null, sha: null };
   const j = await r.json();
   // archivos >1 MB no traen content; no es el caso de estos JSON
@@ -184,6 +185,9 @@ const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "
 const fmtFecha = iso => iso ? new Date(iso).toLocaleString("es-CL", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }) : "—";
 const fmtDia = d => d ? new Date(d + "T12:00:00").toLocaleDateString("es-CL", { day: "2-digit", month: "short", year: "numeric" }) : "—";
 
+// política "el stop solo sube": en tu cartera se usa el mayor entre stop original y vigente
+const stopEf = (o, v) => { const xs = [o, v].filter(x => x !== null && x !== undefined && !isNaN(x)); return xs.length ? Math.max(...xs) : null; };
+
 function senal(p, compra, venta, stop) {
   if (p === null || p === undefined || isNaN(p) || compra == null) return "SIN-DATO";
   if (p <= stop) return "STOP-LOSS";
@@ -194,7 +198,7 @@ function senal(p, compra, venta, stop) {
 const pill = s => `<span class="pill ${s}">${s === "SIN-DATO" ? "Sin dato" : s}</span>`;
 
 // ===================== estado =====================
-let S = { senales: null, precios: null, cartera: { posiciones: [] }, carteraSha: null, dirty: false };
+let S = { filtros: { colchon_min: 0.02, retorno_riesgo_min: 1.5 }, senales: null, precios: null, cartera: { posiciones: [] }, carteraSha: null, dirty: false };
 let filtro = null, sortK = null, sortDir = 1;
 const CMP_KEY = "senales_ipsa_cmp";
 let cmp = {};
@@ -209,7 +213,8 @@ async function cargar() {
   if (!ready()) { app.innerHTML = ""; abrirConfig(true); return; }
   app.innerHTML = `<p class="sub" style="padding:40px 0">Cargando datos…</p>`;
   try {
-    const [s, p, c] = await Promise.all([readData("senales_actual.json"), readData("precios.json"), readData("cartera.json")]);
+    const [s, p, c, k] = await Promise.all([readData("senales_actual.json"), readData("precios.json"), readData("cartera.json"), readData("config.json")]);
+    if (k.json?.filtros_compra) S.filtros = { ...S.filtros, ...k.json.filtros_compra };
     S.senales = s.json; S.precios = p.json;
     if (!S.dirty) { S.cartera = c.json || { posiciones: [] }; }
     S.carteraSha = c.sha;
@@ -263,7 +268,7 @@ function render() {
 
   <section class="panel">
     <div class="panel-head">
-      <div><h2>Corto plazo</h2><p>Señal según precio actual contra compra, venta objetivo y stop-loss del boletín. El punto marca acciones que tienes en cartera. Escribe un precio en <i>Comparar</i> para simular.</p></div>
+      <div><h2>Corto plazo</h2><p>Señal según precio actual contra compra, venta objetivo y stop-loss del boletín. El punto marca acciones que tienes en cartera. <i>Oportunidad</i> = COMPRAR con colchón y retorno/riesgo suficientes; esas te llegan por mail. Escribe un precio en <i>Comparar</i> para simular.</p></div>
     </div>
     <div class="table-scroll"><table id="tbl-cp">
       <thead><tr>
@@ -276,6 +281,7 @@ function render() {
         <th data-k="stop" class="num">Stop-loss</th>
         <th data-k="upside" class="num">Upside</th>
         <th data-k="colchon" class="num">Colchón s/ stop</th>
+        <th data-k="rr" class="num">Ret./riesgo</th>
         <th data-k="senal">Señal</th>
         <th class="num cmp">Comparar</th>
         <th class="num cmp">Upside*</th>
@@ -287,7 +293,7 @@ function render() {
 
   <section class="panel">
     <div class="panel-head">
-      <div><h2>Mi cartera</h2><p>Parámetros originales (los del boletín cuando compraste) contra los vigentes: las celdas en amarillo cambiaron. Escribe un precio de venta para ver tu utilidad si vendes a ese precio. Los cambios se guardan en el repo y alimentan las alertas por mail.</p></div>
+      <div><h2>Mi cartera</h2><p>Parámetros originales (los del boletín cuando compraste) contra los vigentes: las celdas en amarillo cambiaron. La señal usa el stop efectivo: el mayor entre tu stop original y el vigente, porque el stop solo sube. Escribe un precio de venta para ver tu utilidad si vendes a ese precio. Los cambios se guardan en el repo y alimentan las alertas por mail.</p></div>
     </div>
     <div class="pf-stats" id="pf-stats"></div>
     <div class="pf-form">
@@ -303,7 +309,7 @@ function render() {
         <th>Acción</th><th class="num">Cantidad</th><th class="num">P. compra</th><th class="num">Invertido</th>
         <th class="num">P. actual</th><th class="num">Utilidad no realizada</th>
         <th class="num">Compra orig.</th><th class="num">Take profit orig.</th><th class="num">Stop orig.</th>
-        <th>Señal</th><th class="num">Dividendos</th><th class="num cmp">Precio venta</th><th class="num cmp">Utilidad al vender</th><th></th>
+        <th>Señal (stop solo sube)</th><th class="num">Dividendos</th><th class="num cmp">Precio venta</th><th class="num cmp">Utilidad al vender</th><th></th>
       </tr></thead>
       <tbody id="pf-body"></tbody>
     </table></div>
@@ -329,8 +335,13 @@ function filaData(a) {
     upside: p != null ? (a.venta - p) / p : null,
     colchon: p != null ? (p - a.stop) / p : null,
     senal: senal(p, a.compra, a.venta, a.stop),
+    rr: p != null && p > a.stop ? ((a.venta - p) / p) / ((p - a.stop) / p) : null,
   };
+  // oportunidad = COMPRAR + colchón mínimo + retorno/riesgo mínimo (mismos filtros que las alertas)
 }
+
+const esOportunidad = (r, mis) => !mis.has(r.accion) && r.senal === "COMPRAR" &&
+  r.colchon >= S.filtros.colchon_min && r.rr >= S.filtros.retorno_riesgo_min;
 
 function filasCP(mis) {
   let rows = (S.senales?.acciones || []).map(filaData);
@@ -351,7 +362,8 @@ function filasCP(mis) {
       <td class="num dim">${fmtN(r.stop)}</td>
       <td class="num ${cls(r.upside)}">${fmtP(r.upside)}</td>
       <td class="num ${cls(r.colchon)}">${fmtP(r.colchon)}</td>
-      <td>${pill(r.senal)}</td>
+      <td class="num">${r.rr != null ? r.rr.toLocaleString("es-CL", { maximumFractionDigits: 1 }) : "—"}</td>
+      <td>${pill(r.senal)}${esOportunidad(r, mis) ? ' <span class="pill OPORTUNIDAD">oportunidad</span>' : ""}</td>
       <td class="num cmp"><input class="num small cmp-in" type="number" step="0.01" data-t="${r.accion}" value="${esc(cmp[r.accion] ?? "")}" placeholder="${fmtN(r.precio)}"></td>
       <td class="num cmp" data-out="up-${r.accion}"></td>
       <td class="cmp" data-out="sig-${r.accion}"></td>
@@ -399,7 +411,7 @@ function renderCartera() {
       <td class="num">${fmtN(pa)}</td>
       <td class="num ${cls(unr)}">${fmtCLP(unr)}<div class="vig">${fmtP(unr != null ? unr / invertido : null)}</div></td>
       ${param("compra")}${param("venta")}${param("stop")}
-      <td>${pill(senal(pa, v.compra, v.venta, v.stop))}</td>
+      <td>${pill(senal(pa, v.compra, v.venta, stopEf(o.stop, v.stop)))}<div class="vig">stop efectivo ${fmtN(stopEf(o.stop, v.stop))}${pa != null && stopEf(o.stop, v.stop) ? ` · ${fmtP((pa - stopEf(o.stop, v.stop)) / pa)}` : ""}</div></td>
       <td class="num"><input class="num small" type="number" step="1" min="0" data-i="${i}" data-f="dividendos" value="${p.dividendos || ""}" placeholder="0"></td>
       <td class="num cmp"><input class="num" type="number" step="0.01" min="0" data-i="${i}" data-f="precio_venta" value="${p.precio_venta ?? ""}" placeholder="${fmtN(pa)}"></td>
       <td class="num cmp ${cls(uv)}">${fmtCLP(uv)}<div class="vig">${fmtP(uv != null ? uv / invertido : null)}</div></td>
