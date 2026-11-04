@@ -146,6 +146,7 @@
 <div class="wrap" id="app"></div>
 
 <dialog id="cfg-dialog"><div class="setup" id="cfg-box"></div></dialog>
+<dialog id="sell-dialog"><div class="setup" id="sell-box"></div></dialog>
 
 <script>
 // ===================== configuración y API de GitHub =====================
@@ -317,6 +318,22 @@ function render() {
     <div class="savebar"><span class="msg" id="save-msg">${S.dirty ? "Cambios sin guardar" : ""}</span><button class="btn primary" id="btn-save" ${S.dirty ? "" : "disabled"}>Guardar cartera</button></div>
   </section>
 
+  <section class="panel">
+    <div class="panel-head">
+      <div><h2>Ventas realizadas</h2><p>Registro de lo que ya vendiste. Para registrar una venta usa el botón <i>Vender</i> de cada posición; si te equivocas, <i>↩</i> la devuelve a la cartera.</p></div>
+    </div>
+    <div class="pf-stats" id="vt-stats"></div>
+    <div class="table-scroll"><table>
+      <thead><tr>
+        <th>Acción</th><th>Compra</th><th>Venta</th><th class="num">Días</th><th class="num">Cantidad</th>
+        <th class="num">P. compra</th><th class="num">P. venta</th><th class="num">Dividendos</th>
+        <th class="num">Utilidad</th><th>Motivo</th><th></th>
+      </tr></thead>
+      <tbody id="vt-body"></tbody>
+    </table></div>
+    <div class="empty" id="vt-empty" hidden>Aún no registras ventas.</div>
+  </section>
+
   <footer>
     Parámetros del Boletín Técnico de Ossa Señoret (Consorcio Corredores de Bolsa); no constituyen recomendación de inversión.
     Precios de Yahoo Finance con demora de ~15 minutos: confirma en tu bróker antes de operar.
@@ -324,6 +341,7 @@ function render() {
   </footer>`;
 
   renderCartera();
+  renderVentas();
   bind();
 }
 
@@ -416,6 +434,7 @@ function renderCartera() {
       <td class="num cmp"><input class="num" type="number" step="0.01" min="0" data-i="${i}" data-f="precio_venta" value="${p.precio_venta ?? ""}" placeholder="${fmtN(pa)}"></td>
       <td class="num cmp ${cls(uv)}">${fmtCLP(uv)}<div class="vig">${fmtP(uv != null ? uv / invertido : null)}</div></td>
       <td><div class="row-actions">
+        <button class="tiny" data-sell="${i}" title="Registrar venta">Vender</button>
         <button class="tiny" data-adopt="${i}" title="Usar los parámetros vigentes como originales">✓ vig.</button>
         <button class="tiny del" data-del="${i}" title="Quitar">✕</button>
       </div></td>
@@ -430,6 +449,106 @@ function renderCartera() {
     ["Dividendos", fmtCLP(div), ""],
     ["Utilidad al vender (esc.)", hayVenta ? fmtCLP(utilVenta) : "—", hayVenta ? cls(utilVenta) : ""],
   ].map(([l, n, c]) => `<div class="pf-stat"><div class="n ${c}">${n}</div><div class="l">${l}</div></div>`).join("");
+}
+
+// ===================== ventas realizadas =====================
+const utilVenta = v => (v.precio_venta - v.precio_compra) * v.cantidad + (Number(v.dividendos) || 0);
+const dias = (a, b) => a && b ? Math.round((new Date(b) - new Date(a)) / 864e5) : null;
+
+function renderVentas() {
+  const ventas = [...(S.cartera.ventas || [])].sort((a, b) => String(b.fecha_venta).localeCompare(String(a.fecha_venta)));
+  document.getElementById("vt-empty").hidden = ventas.length > 0;
+  document.getElementById("vt-body").innerHTML = ventas.map(v => {
+    const u = utilVenta(v), base = v.precio_compra * v.cantidad;
+    return `<tr>
+      <td class="accion">${esc(v.accion)}</td>
+      <td class="dim">${fmtDia(v.fecha_compra)}</td>
+      <td>${fmtDia(v.fecha_venta)}</td>
+      <td class="num dim">${dias(v.fecha_compra, v.fecha_venta) ?? "—"}</td>
+      <td class="num">${fmtN(v.cantidad)}</td>
+      <td class="num dim">${fmtN(v.precio_compra)}</td>
+      <td class="num">${fmtN(v.precio_venta)}</td>
+      <td class="num dim">${fmtCLP(v.dividendos || 0)}</td>
+      <td class="num ${cls(u)}">${fmtCLP(u)}<div class="vig">${fmtP(base ? u / base : null)}</div></td>
+      <td>${esc(v.motivo || "")}</td>
+      <td><button class="tiny" data-undo="${esc(v.id)}" title="Deshacer: devolver a la cartera">↩</button></td>
+    </tr>`;
+  }).join("");
+
+  const us = ventas.map(utilVenta), gan = us.filter(x => x > 0), per = us.filter(x => x <= 0);
+  const total = us.reduce((a, b) => a + b, 0);
+  const prom = xs => xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null;
+  document.getElementById("vt-stats").innerHTML = [
+    ["Utilidad realizada", fmtCLP(ventas.length ? total : null), cls(total)],
+    ["Operaciones", ventas.length ? `${ventas.length} <span class="vig">${gan.length} ✓ · ${per.length} ✕</span>` : "—", ""],
+    ["Tasa de acierto", ventas.length ? fmtP(gan.length / ventas.length) : "—", ""],
+    ["Ganancia promedio", fmtCLP(prom(gan)), "up"],
+    ["Pérdida promedio", fmtCLP(prom(per)), "down"],
+  ].map(([l, n, c]) => `<div class="pf-stat"><div class="n ${c}">${n}</div><div class="l">${l}</div></div>`).join("");
+
+  document.querySelectorAll("[data-undo]").forEach(b => b.onclick = () => deshacerVenta(b.dataset.undo));
+}
+
+function abrirVenta(i) {
+  const p = S.cartera.posiciones[i], v = vig(p.accion) || {}, pa = precio(p.accion);
+  const ef = stopEf(p.originales?.stop, v.stop);
+  const sugerido = parseFloat(p.precio_venta) || pa || "";
+  const motivoPara = pv => pv <= ef ? "Stop-loss" : (v.venta && pv >= v.venta ? "Take profit" : "Manual");
+  const dlg = document.getElementById("sell-dialog");
+  document.getElementById("sell-box").innerHTML = `
+    <h2>Vender ${esc(p.accion)}</h2>
+    <p>Tienes ${fmtN(p.cantidad)} acciones compradas a ${fmtN(p.precio_compra)}. Si vendes una parte, el resto sigue en la cartera.</p>
+    <div class="field"><label>Cantidad vendida</label><input id="s-q" type="number" min="1" max="${p.cantidad}" step="1" value="${p.cantidad}"></div>
+    <div class="field"><label>Precio de venta (el que te ejecutó el bróker)</label><input id="s-p" type="number" min="0" step="0.01" value="${sugerido}"></div>
+    <div class="field"><label>Fecha de venta</label><input id="s-f" type="date" value="${new Date().toISOString().slice(0, 10)}"></div>
+    <div class="field"><label>Motivo</label><select id="s-m">${["Stop-loss", "Take profit", "Manual"].map(m => `<option>${m}</option>`).join("")}</select></div>
+    <p id="s-prev" class="vig" style="font-size:.85rem"></p>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:8px">
+      <button class="btn" id="s-cancel">Cancelar</button><button class="btn primary" id="s-ok">Registrar venta</button>
+    </div>`;
+  const qI = document.getElementById("s-q"), pI = document.getElementById("s-p"), mI = document.getElementById("s-m");
+  const prev = () => {
+    const q = Math.min(+qI.value || 0, p.cantidad), pv = +pI.value || 0;
+    const div = (Number(p.dividendos) || 0) * (q / p.cantidad);
+    const u = (pv - p.precio_compra) * q + div;
+    document.getElementById("s-prev").innerHTML = pv && q ? `Utilidad de esta venta: <b class="${cls(u)}">${fmtCLP(u)}</b> (${fmtP(u / (p.precio_compra * q))})` : "";
+  };
+  pI.oninput = () => { mI.value = motivoPara(+pI.value); prev(); };
+  qI.oninput = prev;
+  mI.value = motivoPara(+pI.value); prev();
+  dlg.showModal();
+  document.getElementById("s-cancel").onclick = () => dlg.close();
+  document.getElementById("s-ok").onclick = () => {
+    const q = Math.floor(+qI.value), pv = +pI.value;
+    if (!(q > 0 && q <= p.cantidad) || !(pv > 0)) { alert("Revisa cantidad y precio."); return; }
+    const div = (Number(p.dividendos) || 0) * (q / p.cantidad);
+    S.cartera.ventas = S.cartera.ventas || [];
+    S.cartera.ventas.push({
+      id: `v-${Date.now().toString(36)}`, pos_id: p.id, accion: p.accion, cantidad: q,
+      precio_compra: p.precio_compra, precio_venta: pv, fecha_compra: p.fecha_compra || null,
+      fecha_venta: document.getElementById("s-f").value, dividendos: Math.round(div),
+      motivo: mI.value, originales: p.originales || null,
+    });
+    if (q === p.cantidad) S.cartera.posiciones.splice(i, 1);
+    else { p.cantidad -= q; p.dividendos = Math.round((Number(p.dividendos) || 0) - div); p.precio_venta = null; }
+    dlg.close(); marcarDirty(); render(); guardarCartera();
+  };
+}
+
+function deshacerVenta(id) {
+  const ventas = S.cartera.ventas || [], k = ventas.findIndex(v => v.id === id);
+  if (k < 0) return;
+  const v = ventas[k];
+  if (!confirm(`¿Devolver ${fmtN(v.cantidad)} ${v.accion} a la cartera y borrar esta venta?`)) return;
+  const pos = S.cartera.posiciones.find(p => p.id === v.pos_id);
+  if (pos) { pos.cantidad += v.cantidad; pos.dividendos = (Number(pos.dividendos) || 0) + (v.dividendos || 0); }
+  else S.cartera.posiciones.push({
+    id: v.pos_id || `${v.accion.toLowerCase()}-${Date.now().toString(36)}`, accion: v.accion, cantidad: v.cantidad,
+    precio_compra: v.precio_compra, fecha_compra: v.fecha_compra, originales: v.originales || {},
+    dividendos: v.dividendos || 0, precio_venta: null,
+  });
+  ventas.splice(k, 1);
+  marcarDirty(); render(); guardarCartera();
 }
 
 function marcarDirty() {
@@ -464,7 +583,8 @@ function bind() {
     marcarDirty(); render();
   };
   body.onclick = e => {
-    const ad = e.target.closest("[data-adopt]"), del = e.target.closest("[data-del]");
+    const ad = e.target.closest("[data-adopt]"), del = e.target.closest("[data-del]"), sell = e.target.closest("[data-sell]");
+    if (sell) abrirVenta(+sell.dataset.sell);
     if (ad) {
       const p = S.cartera.posiciones[ad.dataset.adopt], v = vig(p.accion);
       if (v) { p.originales = { compra: v.compra, venta: v.venta, stop: v.stop }; marcarDirty(); render(); }
