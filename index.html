@@ -98,6 +98,10 @@
   .pill.STOP-LOSS{background:var(--bad-tint); color:var(--bad-ink)}
   .pill.OPORTUNIDAD{background:var(--accent); color:#fff}
   .pill.ESPERAR, .pill.SIN-DATO{background:var(--neutral-tint); color:var(--neutral-ink)}
+  .pill.EN-ZONA{background:transparent; color:var(--accent-ink); box-shadow:inset 0 0 0 1px var(--accent); cursor:help}
+  .pill.STOP-EMERGENCIA, .pill.STOP-CIERRE{background:var(--bad); color:#fff}
+  .pill.TOCO-STOP, .pill.CERCA-STOP{background:var(--warn-tint); color:var(--warn-ink)}
+  .pill[title]{cursor:help}
 
   .cmp{background:var(--accent-tint)}
   input.num{width:92px; font:inherit; font-family:"IBM Plex Mono",monospace; font-size:.84rem; text-align:right; padding:5px 7px; border-radius:6px; border:1px solid var(--border-strong); background:var(--surface); color:var(--ink)}
@@ -199,7 +203,7 @@ function senal(p, compra, venta, stop) {
 const pill = s => `<span class="pill ${s}">${s === "SIN-DATO" ? "Sin dato" : s}</span>`;
 
 // ===================== estado =====================
-let S = { filtros: { colchon_min: 0.02, retorno_riesgo_min: 1.5 }, senales: null, precios: null, cartera: { posiciones: [] }, carteraSha: null, dirty: false };
+let S = { filtros: { colchon_min: 0.02, retorno_riesgo_min: 2, media_movil: 50, exigir_giro: true }, estados: {}, tendencia: null, senales: null, precios: null, cartera: { posiciones: [] }, carteraSha: null, dirty: false };
 let filtro = null, sortK = null, sortDir = 1;
 const CMP_KEY = "senales_ipsa_cmp";
 let cmp = {};
@@ -214,8 +218,11 @@ async function cargar() {
   if (!ready()) { app.innerHTML = ""; abrirConfig(true); return; }
   app.innerHTML = `<p class="sub" style="padding:40px 0">Cargando datos…</p>`;
   try {
-    const [s, p, c, k] = await Promise.all([readData("senales_actual.json"), readData("precios.json"), readData("cartera.json"), readData("config.json")]);
+    const [s, p, c, k, e, t] = await Promise.all([readData("senales_actual.json"), readData("precios.json"), readData("cartera.json"),
+      readData("config.json"), readData("alertas_estado.json"), readData("tendencia.json")]);
     if (k.json?.filtros_compra) S.filtros = { ...S.filtros, ...k.json.filtros_compra };
+    S.piso = k.json?.alertas?.piso_emergencia ?? 0.03;
+    S.estados = e.json || {}; S.tendencia = t.json;
     S.senales = s.json; S.precios = p.json;
     if (!S.dirty) { S.cartera = c.json || { posiciones: [] }; }
     S.carteraSha = c.sha;
@@ -269,7 +276,7 @@ function render() {
 
   <section class="panel">
     <div class="panel-head">
-      <div><h2>Corto plazo</h2><p>Señal según precio actual contra compra, venta objetivo y stop-loss del boletín. El punto marca acciones que tienes en cartera. <i>Oportunidad</i> = COMPRAR con colchón y retorno/riesgo suficientes; esas te llegan por mail. Escribe un precio en <i>Comparar</i> para simular.</p></div>
+      <div><h2>Corto plazo</h2><p>Señal según precio actual contra compra, venta objetivo y stop-loss del boletín. El punto marca acciones que tienes en cartera. Al cierre, las que no tienes se clasifican: <i>oportunidad</i> (precio, premio y momentum: te llega mail) o <i>en zona, esperar</i> (precio y premio sí, pero bajo su media móvil o sin alza en el día; pasa el mouse para ver el motivo). Escribe un precio en <i>Comparar</i> para simular.</p></div>
     </div>
     <div class="table-scroll"><table id="tbl-cp">
       <thead><tr>
@@ -283,6 +290,7 @@ function render() {
         <th data-k="upside" class="num">Upside</th>
         <th data-k="colchon" class="num">Colchón s/ stop</th>
         <th data-k="rr" class="num">Ret./riesgo</th>
+        <th data-k="vsmm" class="num" title="Precio actual contra la media móvil de ${S.tendencia?.media_movil ?? S.filtros.media_movil} días (tendencia de fondo)">vs MM${S.tendencia?.media_movil ?? S.filtros.media_movil}</th>
         <th data-k="senal">Señal</th>
         <th class="num cmp">Comparar</th>
         <th class="num cmp">Upside*</th>
@@ -294,7 +302,7 @@ function render() {
 
   <section class="panel">
     <div class="panel-head">
-      <div><h2>Mi cartera</h2><p>Parámetros originales (los del boletín cuando compraste) contra los vigentes: las celdas en amarillo cambiaron. La señal usa el stop efectivo: el mayor entre tu stop original y el vigente, porque el stop solo sube. Escribe un precio de venta para ver tu utilidad si vendes a ese precio. Los cambios se guardan en el repo y alimentan las alertas por mail.</p></div>
+      <div><h2>Mi cartera</h2><p>Parámetros originales (los del boletín cuando compraste) contra los vigentes: las celdas en amarillo cambiaron. La señal usa el stop efectivo: el mayor entre tu stop original y el vigente, porque el stop solo sube. Un toque intradía solo avisa (<i>tocó stop</i>); se vende si cierra bajo el stop (<i>vender en apertura</i>) o si cae ${fmtP(S.piso ?? 0.03)} bajo él (<i>vender ya</i>). Escribe un precio de venta para ver tu utilidad si vendes a ese precio. Los cambios se guardan en el repo y alimentan las alertas por mail.</p></div>
     </div>
     <div class="pf-stats" id="pf-stats"></div>
     <div class="pf-form">
@@ -367,12 +375,45 @@ function filaData(a) {
     colchon: p != null ? (p - a.stop) / p : null,
     senal: senal(p, a.compra, a.venta, a.stop),
     rr: p != null && p > a.stop ? ((a.venta - p) / p) / ((p - a.stop) / p) : null,
+    vsmm: p != null && mm(a.accion) ? p / mm(a.accion) - 1 : null,
   };
   // oportunidad = COMPRAR + colchón mínimo + retorno/riesgo mínimo (mismos filtros que las alertas)
 }
 
-const esOportunidad = (r, mis) => !mis.has(r.accion) && r.senal === "COMPRAR" &&
-  r.colchon >= S.filtros.colchon_min && r.rr >= S.filtros.retorno_riesgo_min;
+// estado de compra: lo calcula la corrida de cierre (mismos filtros que los mails)
+const mm = t => S.tendencia?.acciones?.[t]?.mm ?? null;
+function pillCompra(r, mis) {
+  if (mis.has(r.accion)) return "";
+  const e = S.estados[`opp:${r.accion}`], n = S.tendencia?.media_movil ?? S.filtros.media_movil;
+  const cuando = S.tendencia?.actualizado ? `al cierre del ${fmtFecha(S.tendencia.actualizado)}` : "al cierre";
+  if (e === "OPORTUNIDAD") return ` <span class="pill OPORTUNIDAD" title="Evaluado ${cuando}">oportunidad</span>`;
+  if (e !== "EN-ZONA") return "";
+  const m = mm(r.accion), d = S.precios?.precios?.[r.accion] || {}, mot = [];
+  if (m == null) mot.push("sin historia para la media");
+  else if (r.precio != null && r.precio <= m) mot.push(`bajo MM${n} (${fmtP(r.precio / m - 1)})`);
+  if (S.filtros.exigir_giro && d.cierre_anterior && r.precio != null && r.precio <= d.cierre_anterior)
+    mot.push(`no ha girado (${fmtP(r.precio / d.cierre_anterior - 1)} vs día anterior)`);
+  return ` <span class="pill EN-ZONA" title="Cumple precio y premio, pero falla el momentum ${cuando}: ${esc(mot.join(", ") || "momentum")}">en zona, esperar</span>`;
+}
+
+// estado de la posición según las alertas (toque intradía, cierre bajo stop, piso de emergencia)
+const ESTADOS_POS = {
+  "STOP-EMERGENCIA": ["vender ya", "Cayó bajo el piso de emergencia"],
+  "STOP-CIERRE": ["vender en apertura", "Cerró bajo el stop"],
+  "TOCO-STOP": ["tocó stop", "Tocó el stop durante el día: se decide con el cierre"],
+  "STOP-LOSS": ["tocó stop", "Tocó el stop durante el día: se decide con el cierre"],
+  "CERCA-STOP": ["cerca del stop", "Colchón bajo el mínimo de alerta"],
+  "VENDER": ["VENDER", "Llegó al take profit"],
+};
+function pillPos(p, pa, v, o) {
+  const e = S.estados[p.id];
+  if (e && ESTADOS_POS[e]) {
+    const cls = e === "STOP-LOSS" ? "TOCO-STOP" : e;
+    return `<span class="pill ${cls}" title="${ESTADOS_POS[e][1]}">${ESTADOS_POS[e][0]}</span>`;
+  }
+  const s = senal(pa, v.compra, v.venta, stopEf(o.stop, v.stop));
+  return s === "STOP-LOSS" ? `<span class="pill TOCO-STOP" title="Bajo el stop según el último precio; la alerta lo confirma">bajo stop</span>` : pill(s);
+}
 
 function filasCP(mis) {
   let rows = (S.senales?.acciones || []).map(filaData);
@@ -394,7 +435,8 @@ function filasCP(mis) {
       <td class="num ${cls(r.upside)}">${fmtP(r.upside)}</td>
       <td class="num ${cls(r.colchon)}">${fmtP(r.colchon)}</td>
       <td class="num">${r.rr != null ? r.rr.toLocaleString("es-CL", { maximumFractionDigits: 1 }) : "—"}</td>
-      <td>${pill(r.senal)}${esOportunidad(r, mis) ? ' <span class="pill OPORTUNIDAD">oportunidad</span>' : ""}</td>
+      <td class="num ${cls(r.vsmm)}">${fmtP(r.vsmm)}</td>
+      <td>${pill(r.senal)}${pillCompra(r, mis)}</td>
       <td class="num cmp"><input class="num small cmp-in" type="number" step="0.01" data-t="${r.accion}" value="${esc(cmp[r.accion] ?? "")}" placeholder="${fmtN(r.precio)}"></td>
       <td class="num cmp" data-out="up-${r.accion}"></td>
       <td class="cmp" data-out="sig-${r.accion}"></td>
@@ -442,7 +484,7 @@ function renderCartera() {
       <td class="num">${fmtN(pa)}</td>
       <td class="num ${cls(unr)}">${fmtCLP(unr)}<div class="vig">${fmtP(unr != null ? unr / invertido : null)}</div></td>
       ${param("compra")}${param("venta")}${param("stop")}
-      <td>${pill(senal(pa, v.compra, v.venta, stopEf(o.stop, v.stop)))}<div class="vig">stop efectivo ${fmtN(stopEf(o.stop, v.stop))}${pa != null && stopEf(o.stop, v.stop) ? ` · ${fmtP((pa - stopEf(o.stop, v.stop)) / pa)}` : ""}</div></td>
+      <td>${pillPos(p, pa, v, o)}<div class="vig">stop efectivo ${fmtN(stopEf(o.stop, v.stop))}${pa != null && stopEf(o.stop, v.stop) ? ` · ${fmtP((pa - stopEf(o.stop, v.stop)) / pa)}` : ""}</div></td>
       <td class="num"><input class="num small" type="number" step="1" min="0" data-i="${i}" data-f="dividendos" value="${p.dividendos || ""}" placeholder="0"></td>
       <td class="num cmp"><input class="num" type="number" step="0.01" min="0" data-i="${i}" data-f="precio_venta" value="${p.precio_venta ?? ""}" placeholder="${fmtN(pa)}"></td>
       <td class="num cmp ${cls(uv)}">${fmtCLP(uv)}<div class="vig">${fmtP(uv != null ? uv / invertido : null)}</div></td>
