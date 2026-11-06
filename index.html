@@ -276,7 +276,7 @@ function render() {
 
   <section class="panel">
     <div class="panel-head">
-      <div><h2>Corto plazo</h2><p>Señal según precio actual contra compra, venta objetivo y stop-loss del boletín. El punto marca acciones que tienes en cartera. Al cierre, las que no tienes se clasifican: <i>oportunidad</i> (precio, premio y momentum: te llega mail) o <i>en zona, esperar</i> (precio y premio sí, pero bajo su media móvil o sin alza en el día; pasa el mouse para ver el motivo). Escribe un precio en <i>Comparar</i> para simular.</p></div>
+      <div><h2>Corto plazo</h2><p>Señal según precio actual contra compra, venta objetivo y stop-loss del boletín. El punto marca acciones que tienes en cartera. Al cierre, las que no tienes se clasifican: <i>oportunidad</i> (precio, premio y momentum: te llega mail) o <i>en zona, esperar</i> (precio y premio sí, pero bajo su media móvil o sin alza en el día; pasa el mouse para ver el motivo). Las que ya tienes aparecen como <i>completar</i> si cumplen los mismos criterios y estás bajo tu target. Escribe un precio en <i>Comparar</i> para simular.</p></div>
     </div>
     <div class="table-scroll"><table id="tbl-cp">
       <thead><tr>
@@ -382,18 +382,23 @@ function filaData(a) {
 
 // estado de compra: lo calcula la corrida de cierre (mismos filtros que los mails)
 const mm = t => S.tendencia?.acciones?.[t]?.mm ?? null;
+function pillCompletar(t) {
+  const c = S.estados[`completar:${t}`];
+  if (S.estados[`opp:${t}`] !== "COMPLETAR" || !c) return "";
+  return ` <span class="pill OPORTUNIDAD" title="Cumple los criterios de compra con tu stop efectivo y estás bajo tu target de riesgo. Tienes ${fmtN(c.tienes)}; comprar ${fmtN(c.faltan)} más (~${fmtCLP(c.monto)})${c.tope ? ", limitado por el tope por posición" : ""}. Evaluado al cierre del ${fmtDia(c.fecha)}.">completar: faltan ${fmtN(c.faltan)}</span>`;
+}
 function pillCompra(r, mis) {
-  if (mis.has(r.accion)) return "";
+  if (mis.has(r.accion)) return pillCompletar(r.accion);
   const e = S.estados[`opp:${r.accion}`], n = S.tendencia?.media_movil ?? S.filtros.media_movil;
   const cuando = S.tendencia?.actualizado ? `al cierre del ${fmtFecha(S.tendencia.actualizado)}` : "al cierre";
   if (e === "OPORTUNIDAD") return ` <span class="pill OPORTUNIDAD" title="Evaluado ${cuando}">oportunidad</span>`;
   if (e !== "EN-ZONA") return "";
   const m = mm(r.accion), d = S.precios?.precios?.[r.accion] || {}, mot = [];
   if (m == null) mot.push("sin historia para la media");
-  else if (r.precio != null && r.precio <= m) mot.push(`bajo MM${n} (${fmtP(r.precio / m - 1)})`);
+  else if (r.precio != null && r.precio <= m) mot.push(`bajo MM${n} ${fmtP(r.precio / m - 1)}`);
   if (S.filtros.exigir_giro && d.cierre_anterior && r.precio != null && r.precio <= d.cierre_anterior)
-    mot.push(`no ha girado (${fmtP(r.precio / d.cierre_anterior - 1)} vs día anterior)`);
-  return ` <span class="pill EN-ZONA" title="Cumple precio y premio, pero falla el momentum ${cuando}: ${esc(mot.join(", ") || "momentum")}">en zona, esperar</span>`;
+    mot.push(r.precio < d.cierre_anterior ? `cayó hoy ${fmtP(r.precio / d.cierre_anterior - 1)}` : "sin alza hoy");
+  return ` <span class="pill EN-ZONA" title="Cumple precio y premio, pero falla el momentum ${cuando}: ${esc(mot.join(" · ") || "momentum")}">en zona, esperar</span>`;
 }
 
 // estado de la posición según las alertas (toque intradía, cierre bajo stop, piso de emergencia)
@@ -407,11 +412,17 @@ const ESTADOS_POS = {
 };
 function pillPos(p, pa, v, o) {
   const e = S.estados[p.id];
+  const desde = S.estados[`desde:${p.id}`];
+  if ((e === "STOP-CIERRE" || e === "STOP-EMERGENCIA") && desde !== new Date().toLocaleDateString("sv-SE", { timeZone: "America/Santiago" })) {
+    const ev = e === "STOP-CIERRE" ? "Cerró bajo el stop" : "Cayó bajo el piso de emergencia";
+    return `<span class="pill ${e}" title="${ev}${desde ? " el " + fmtDia(desde) : ""}">venta pendiente</span>`;
+  }
   if (e && ESTADOS_POS[e]) {
     const cls = e === "STOP-LOSS" ? "TOCO-STOP" : e;
     return `<span class="pill ${cls}" title="${ESTADOS_POS[e][1]}">${ESTADOS_POS[e][0]}</span>`;
   }
   const s = senal(pa, v.compra, v.venta, stopEf(o.stop, v.stop));
+  if (!e && s !== "STOP-LOSS") return pill(s) + pillCompletar(p.accion);
   return s === "STOP-LOSS" ? `<span class="pill TOCO-STOP" title="Bajo el stop según el último precio; la alerta lo confirma">bajo stop</span>` : pill(s);
 }
 
