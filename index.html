@@ -79,6 +79,13 @@
   thead th{background:var(--surface-2); text-align:left; padding:9px 11px; font-size:.75rem; color:var(--ink-dim); font-weight:600; white-space:nowrap; border-bottom:1px solid var(--border)}
   thead th[data-k]{cursor:pointer} thead th[data-k]:hover{color:var(--ink)}
   thead th.sorted{color:var(--accent)}
+  tr.rep-head th{background:var(--surface-2); text-align:left; padding:9px 11px; font-size:.75rem; color:var(--ink-dim); font-weight:600; white-space:nowrap; border-top:1px solid var(--border); border-bottom:1px solid var(--border)}
+  tr.rep-head th[data-k]{cursor:pointer} tr.rep-head th[data-k]:hover{color:var(--ink)}
+  tr.rep-head th.cmp{background:var(--accent-tint)}
+  tr.rep-head th.num{text-align:right}
+  tr.rep-head th.sorted{color:var(--accent)}
+  tr.rep-head td.gap{height:14px; padding:0; background:var(--bg); border:none}
+  tbody tr.rep-head:hover td.gap{background:var(--bg)}
   th.num, td.num{text-align:right}
   tbody td{padding:8px 11px; border-bottom:1px solid var(--border); white-space:nowrap; font-variant-numeric:tabular-nums}
   tbody tr:last-child td{border-bottom:none}
@@ -279,23 +286,7 @@ function render() {
       <div><h2>Corto plazo</h2><p>Señal según precio actual contra compra, venta objetivo y stop-loss del boletín. El punto marca acciones que tienes en cartera. Al cierre, las que no tienes se clasifican: <i>oportunidad</i> (precio, premio y momentum: te llega mail) o <i>en zona, esperar</i> (precio y premio sí, pero bajo su media móvil o sin alza en el día; pasa el mouse para ver el motivo). Las que ya tienes aparecen como <i>completar</i> si cumplen los mismos criterios y estás bajo tu target. Escribe un precio en <i>Comparar</i> para simular.</p></div>
     </div>
     <div class="table-scroll"><table id="tbl-cp">
-      <thead><tr>
-        <th data-k="accion">Acción</th>
-        <th data-k="cierre" class="num">Cierre bol.</th>
-        <th data-k="precio" class="num">Precio actual</th>
-        <th data-k="var" class="num">Var.</th>
-        <th data-k="compra" class="num">Compra</th>
-        <th data-k="venta" class="num">Venta obj.</th>
-        <th data-k="stop" class="num">Stop-loss</th>
-        <th data-k="upside" class="num">Upside</th>
-        <th data-k="colchon" class="num">Colchón s/ stop</th>
-        <th data-k="rr" class="num">Ret./riesgo</th>
-        <th data-k="vsmm" class="num" title="Precio actual contra la media móvil de ${S.tendencia?.media_movil ?? S.filtros.media_movil} días (tendencia de fondo)">vs MM${S.tendencia?.media_movil ?? S.filtros.media_movil}</th>
-        <th data-k="senal">Señal</th>
-        <th class="num cmp">Comparar</th>
-        <th class="num cmp">Upside*</th>
-        <th class="cmp">Señal*</th>
-      </tr></thead>
+      <thead><tr>${headCP()}</tr></thead>
       <tbody>${filasCP(mis)}</tbody>
     </table></div>
   </section>
@@ -426,6 +417,26 @@ function pillPos(p, pa, v, o) {
   return s === "STOP-LOSS" ? `<span class="pill TOCO-STOP" title="Bajo el stop según el último precio; la alerta lo confirma">bajo stop</span>` : pill(s);
 }
 
+function headCP() {
+  return `
+        <th data-k="accion">Acción</th>
+        <th data-k="cierre" class="num">Cierre bol.</th>
+        <th data-k="precio" class="num">Precio actual</th>
+        <th data-k="var" class="num">Var.</th>
+        <th data-k="compra" class="num">Compra</th>
+        <th data-k="venta" class="num">Venta obj.</th>
+        <th data-k="stop" class="num">Stop-loss</th>
+        <th data-k="upside" class="num">Upside</th>
+        <th data-k="colchon" class="num">Colchón s/ stop</th>
+        <th data-k="rr" class="num">Ret./riesgo</th>
+        <th data-k="vsmm" class="num" title="Precio actual contra la media móvil de ${S.tendencia?.media_movil ?? S.filtros.media_movil} días (tendencia de fondo)">vs MM${S.tendencia?.media_movil ?? S.filtros.media_movil}</th>
+        <th data-k="senal">Señal</th>
+        <th class="num cmp">Comparar</th>
+        <th class="num cmp">Upside*</th>
+        <th class="cmp">Señal*</th>
+      `;
+}
+const GRUPO = 7;
 function filasCP(mis) {
   let rows = (S.senales?.acciones || []).map(filaData);
   if (sortK) rows.sort((x, y) => {
@@ -433,9 +444,12 @@ function filasCP(mis) {
     if (typeof a === "string" || typeof b === "string") return String(a).localeCompare(String(b)) * sortDir;
     return ((a ?? -Infinity) - (b ?? -Infinity)) * sortDir;
   });
-  return rows.map(r => {
+  if (filtro) rows = rows.filter(r => r.senal === filtro);
+  const nGrupos = Math.max(1, Math.ceil(rows.length / GRUPO)), tam = Math.ceil(rows.length / nGrupos);
+  return rows.map((r, i) => {
+    const sep = i > 0 && i % tam === 0 ? `<tr class="rep-head"><td class="gap" colspan="15"></td></tr><tr class="rep-head">${headCP()}</tr>` : "";
     const sosp = S.precios?.precios?.[r.accion]?.sospechoso;
-    return `<tr data-sig="${r.senal}" class="${filtro && r.senal !== filtro ? "hidden-row" : ""}">
+    return sep + `<tr data-sig="${r.senal}">
       <td class="accion">${r.accion}${mis.has(r.accion) ? '<span class="mine" title="En tu cartera"></span>' : ""}</td>
       <td class="num dim">${fmtN(r.cierre)}</td>
       <td class="num">${fmtN(r.precio)}${sosp ? ' <span class="flag" title="Más de 25% vs cierre del boletín: revisa el precio">⚠</span>' : ""}</td>
